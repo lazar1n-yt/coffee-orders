@@ -1,0 +1,25 @@
+# Override для розробки: hot-reload, відкриті порти, dev-секрети.
+# Запуск: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up`
+
+services:
+  db:
+    ports:
+      - '5432:5432'
+
+  api:
+    build:
+      target: builder
+    environment:
+      NODE_ENV: development
+      JWT_ACCESS_SECRET: dev-access-secret
+      JWT_REFRESH_SECRET: dev-refresh-secret
+      CORS_ORIGIN: http://localhost:5173
+    volumes:
+      - ./backend/src:/app/src:ro
+      - ./backend/prisma:/app/prisma:ro
+    command: ['sh', '-c', 'npx prisma migrate deploy && npx tsx watch src/server.ts']
+    ports:
+      - '4000:4000'
+
+  web:
+    profiles: ['disabled-in-dev']

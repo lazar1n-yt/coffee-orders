@@ -1,0 +1,24 @@
+name: Feature request
+description: Запропонувати нову функцію або покращення
+title: "[feat] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Яку проблему вирішує ця функція?
+    validations: { required: true }
+  - type: textarea
+    id: solution
+    attributes:
+      label: Запропоноване рішення
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативи, які розглядалися
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Пріоритет (MoSCoW)
+      options: [Must have, Should have, Could have, Won't have]

@@ -1,0 +1,35 @@
+name: Bug report
+description: Повідомити про помилку в Coffee Orders
+title: "[bug] "
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Що сталося?
+      description: Опишіть проблему й очікувану поведінку
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Кроки для відтворення
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Версія / commit
+      placeholder: v1.0.0 або 122b6f5
+  - type: dropdown
+    id: area
+    attributes:
+      label: Компонент
+      options: [backend, frontend, docker, ci/cd, docs, інше]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи / скріншоти
+      render: shell

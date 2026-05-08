@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  # ─────────────────────────── BACKEND ───────────────────────────
+  backend:
+    name: Backend · lint · build · test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: coffee
+          POSTGRES_PASSWORD: coffee
+          POSTGRES_DB: coffee_orders_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U coffee -d coffee_orders_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci --no-audit --prefer-offline
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run database migrations (deploy)
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://coffee:coffee@localhost:5432/coffee_orders_test?schema=public
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Unit & integration tests (Vitest)
+        run: npm test -- --reporter=default --reporter=junit --outputFile=./reports/junit.xml
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://coffee:coffee@localhost:5432/coffee_orders_test?schema=public
+          JWT_ACCESS_SECRET: ci-access-secret
+          JWT_REFRESH_SECRET: ci-refresh-secret
+          CORS_ORIGIN: http://localhost:5173
+          UPLOAD_DIR: ./uploads
+
+      - name: Upload backend test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-junit
+          path: backend/reports/junit.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ─────────────────────────── FRONTEND ───────────────────────────
+  frontend:
+    name: Frontend · lint · build · test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --prefer-offline
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Vitest (unit / component)
+        run: npm test -- --reporter=default
+        env:
+          CI: 'true'
+
+      - name: Production build (Vite)
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: http://localhost:4000/api
+
+      - name: Upload frontend build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ────────────────────── SUMMARY (для PR-чек-у) ──────────────────────
+  ci-success:
+    name: CI · summary
+    needs: [backend, frontend]
+    runs-on: ubuntu-24.04
+    if: always()
+    steps:
+      - name: Block merge if any job failed
+        run: |
+          if [[ "${{ needs.backend.result }}" != "success" || "${{ needs.frontend.result }}" != "success" ]]; then
+            echo "::error::CI failed (backend=${{ needs.backend.result }}, frontend=${{ needs.frontend.result }})"
+            exit 1
+          fi
+          echo "✅ All CI jobs passed"
