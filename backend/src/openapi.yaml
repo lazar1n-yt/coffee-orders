@@ -1,0 +1,329 @@
+openapi: 3.1.0
+info:
+  title: Coffee Orders API
+  version: 0.1.0
+  description: |
+    REST API для вебсистеми онлайн-замовлень у кав’ярні.
+    Стек: Node.js 24 + Express 5 + TypeScript + PostgreSQL 18 + Prisma 6.
+servers:
+  - url: http://localhost:4000/api
+    description: Локальний сервер розробки
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        role: { type: string, enum: [CUSTOMER, ADMIN] }
+    AuthTokens:
+      type: object
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        position: { type: integer }
+    MenuItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        priceCents: { type: integer }
+        imageUrl: { type: string, nullable: true }
+        available: { type: boolean }
+        categoryId: { type: string, format: uuid }
+    OrderItemInput:
+      type: object
+      required: [menuItemId, quantity]
+      properties:
+        menuItemId: { type: string, format: uuid }
+        quantity: { type: integer, minimum: 1, maximum: 50 }
+    OrderInput:
+      type: object
+      required: [customerName, phone, pickupTime, items]
+      properties:
+        customerName: { type: string }
+        phone: { type: string }
+        comment: { type: string }
+        pickupTime: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItemInput' }
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, READY, COMPLETED, CANCELLED]
+        totalCents: { type: integer }
+        pickupTime: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              nameSnapshot: { type: string }
+              priceCents: { type: integer }
+              quantity: { type: integer }
+
+paths:
+  /health:
+    get:
+      summary: Health-check
+      responses:
+        '200': { description: OK }
+
+  /auth/register:
+    post:
+      summary: Реєстрація клієнта
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, fullName]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                fullName: { type: string }
+                phone: { type: string }
+      responses:
+        '201':
+          description: Створено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '409':
+          description: Email вже існує
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/login:
+    post:
+      summary: Вхід за email і паролем
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthTokens' }
+        '401':
+          description: Невірні дані
+
+  /auth/refresh:
+    post:
+      summary: Оновлення пари токенів
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: OK }
+
+  /auth/me:
+    get:
+      summary: Поточний користувач
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: OK }
+        '401': { description: Не авторизовано }
+
+  /categories:
+    get:
+      summary: Список категорій
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+    post:
+      summary: Створити категорію (ADMIN)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, slug]
+              properties:
+                name: { type: string }
+                slug: { type: string }
+                position: { type: integer }
+      responses:
+        '201': { description: Створено }
+        '403': { description: Заборонено }
+
+  /menu:
+    get:
+      summary: Перелік позицій меню
+      parameters:
+        - in: query
+          name: categoryId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: available
+          schema: { type: string, enum: [true, false] }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MenuItem' }
+    post:
+      summary: Додати позицію меню (ADMIN)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MenuItem' }
+      responses:
+        '201': { description: Створено }
+
+  /menu/{id}:
+    get:
+      summary: Отримати позицію меню
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { description: Не знайдено }
+    patch:
+      summary: Оновити позицію меню (ADMIN)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Видалити позицію меню (ADMIN)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Видалено }
+
+  /orders:
+    post:
+      summary: Створити замовлення
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderInput' }
+      responses:
+        '201':
+          description: Створено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+    get:
+      summary: Список замовлень (ADMIN)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, CONFIRMED, READY, COMPLETED, CANCELLED]
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: pageSize
+          schema: { type: integer, default: 20 }
+      responses:
+        '200': { description: OK }
+
+  /orders/{id}:
+    get:
+      summary: Отримати замовлення (ADMIN)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+
+  /orders/{id}/status:
+    patch:
+      summary: Змінити статус замовлення (ADMIN)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [PENDING, CONFIRMED, READY, COMPLETED, CANCELLED]
+      responses:
+        '200': { description: OK }

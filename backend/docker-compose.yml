@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: coffee
+      POSTGRES_PASSWORD: coffee
+      POSTGRES_DB: coffee_orders
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coffee -d coffee_orders"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://coffee:coffee@db:5432/coffee_orders?schema=public
+      JWT_ACCESS_SECRET: change-me-access-secret
+      JWT_REFRESH_SECRET: change-me-refresh-secret
+      CORS_ORIGIN: http://localhost:5173
+      UPLOAD_DIR: /app/uploads
+      PUBLIC_FILES_BASE_URL: http://localhost:4000/files
+    ports:
+      - "4000:4000"
+    volumes:
+      - uploads_data:/app/uploads
+
+volumes:
+  db_data:
+  uploads_data:

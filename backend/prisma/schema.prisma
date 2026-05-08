@@ -1,0 +1,102 @@
+// Prisma schema for the coffee shop online ordering system.
+// Database: PostgreSQL 18
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING       // створено, очікує підтвердження
+  CONFIRMED     // підтверджено адміністратором
+  READY         // готове до видачі
+  COMPLETED     // видано клієнту
+  CANCELLED     // скасовано
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String?
+  fullName     String
+  phone        String?
+  role         Role      @default(CUSTOMER)
+  oauthProvider String?
+  oauthId       String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  orders       Order[]
+
+  @@index([oauthProvider, oauthId])
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  slug      String    @unique
+  position  Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  priceCents  Int       // ціна у копійках
+  imageUrl    String?
+  available   Boolean   @default(true)
+  categoryId  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems  OrderItem[]
+
+  @@index([categoryId, available])
+}
+
+model Order {
+  id           String       @id @default(uuid())
+  number       Int          @unique @default(autoincrement())
+  userId       String?
+  customerName String
+  phone        String
+  comment      String?
+  pickupTime   DateTime
+  status       OrderStatus  @default(PENDING)
+  totalCents   Int
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items        OrderItem[]
+
+  @@index([status, createdAt])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  menuItemId  String
+  nameSnapshot String  // фіксуємо назву на момент замовлення
+  priceCents  Int      // фіксуємо ціну на момент замовлення
+  quantity    Int
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem    MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+}
