@@ -18,7 +18,7 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN npm run build
 
 # --- Stage 2: runtime на nginx ---
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.31-alpine AS runtime
 
 # Видаляємо стандартну сторінку nginx і кладемо власний конфіг
 RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/default.conf
