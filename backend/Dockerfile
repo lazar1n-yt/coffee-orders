@@ -1,5 +1,5 @@
 # --- Stage 1: build TypeScript ---
-FROM node:24-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 
 ENV NODE_ENV=development
@@ -13,7 +13,7 @@ RUN npx prisma generate \
  && npm run build
 
 # --- Stage 2: production deps only ---
-FROM node:24-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
@@ -23,7 +23,7 @@ RUN npm ci --omit=dev --no-audit --prefer-offline \
  && npm cache clean --force
 
 # --- Stage 3: runtime ---
-FROM node:24-alpine AS runtime
+FROM node:25-alpine AS runtime
 WORKDIR /app
 
 # tini для коректної обробки SIGTERM (graceful shutdown), wget — для healthcheck
